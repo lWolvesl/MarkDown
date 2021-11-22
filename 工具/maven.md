@@ -194,3 +194,117 @@ mvn archetype:generate "-DgroupId=com.companyname.bank" "-DartifactId=consumerBa
 >
 >   -DinteractiveMode：是否使用交互模式
 
+## 四、分模块开发与设计
+
+-   分模块设计，增加模块可用性
+-   将各个模块拆分
+-   eg：SSM项目
+    -   拆分entity包
+        -   将entity变为一个新的模块，将entity包中的文件复制，此时因为模块中的实体类仅为java原生api，因此pom文件不会追加依赖
+    -   拆分dao包
+        -   不同模块导入需要先install到本地仓库中，依次install即可
+        -   分页插件需保留
+
+## 五、聚合
+
+-   打包类型为pom
+
+## 六、继承
+
+-   定义父工程
+
+```xml
+<parent>
+  xxx
+  xxx
+  xxx
+  <!--填写父工程的pom文件-->
+  <relativePath>../xx/pom.xml</relativePath>
+</parent>
+```
+
+-   父工程定义依赖管理
+
+```xml
+<dependencyManagement>
+  <dependencies>
+  	<dependency>
+    	<!--具体依赖-->
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+```
+
+-   子工程此时无需配置版本
+
+![901637562798_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/901637562798_.pic_hd.jpg)
+
+## 七、属性
+
+### 7.1 定义
+
+```xml
+<properties>
+	<变量名>值</变量名>
+</properties>
+```
+
+### 7.2 使用
+
+```xml
+${变量名}
+```
+
+## 八、工程版本
+
+-   SNAPSHOT 快照版本
+-   RELEASE 发布版本
+
+## 九、资源配置
+
+```xml
+<properties>
+	<变量名>值</变量名>
+</properties>
+
+<!--build中定义-->
+<build>
+	<resource>
+  	<directory>properties目录</directory>
+    <!--开启文件过滤-->
+    <filtering>true</filtering>
+  </resource>
+</build>
+```
+
+## 十、多环境
+
+![911637563359_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/911637563359_.pic_hd.jpg)
+
+-   定义多环境
+
+```xml
+<profiles>
+	<profile>
+  	<id>pro_env</id>
+    <properties>
+    	xxxxxxx
+    </properties>
+  </profile>
+  <profile>
+  	<id>dep_env</id>
+  </profile>
+</profiles>
+```
+
+-   IDEA设置Maven使用环境
+
+![截屏2021-11-22 14.47.28](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/%E6%88%AA%E5%B1%8F2021-11-22%2014.47.28.png)
+
+## 十一、私服
+
+![921637563725_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/921637563725_.pic_hd.jpg)
+
+-   Nexus
+
+-   mvn deploy 发布私服jar包
