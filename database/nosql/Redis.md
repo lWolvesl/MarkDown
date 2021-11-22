@@ -1048,7 +1048,7 @@ Object result = jedis,evalsha(shal,2,userid,prodid);
 
 - 新建`sentinel.conf`文件
 - 配置哨兵
-  - `sentinel monitor mymaster ip port num`num表示至少多少个哨兵同意迁移
+  - `sentinel monitor mymaster ip port num`    num表示至少多少个哨兵同意迁移
 - 启动哨兵
   - redis自带的redis-benchmark工具`redis-sentinel conf文件路径`启动哨兵
   - 默认端口为26379
