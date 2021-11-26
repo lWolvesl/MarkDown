@@ -310,6 +310,32 @@ public class TestInterrupt {
     }
     ```
 
+-   打断park线程
+
+-   part 可以暂停进程，但是只可暂停一次
+
+-   interrupt打断会继续该进程
+
+-   ```java
+    @Slf4j(topic = "c.part")
+    public class Part {
+        public static void main(String[] args) throws InterruptedException {
+            Thread t1 = new Thread(()->{
+                log.debug("part.....");
+                LockSupport.park();
+                log.debug("unpart");
+                log.debug("打断状态：{}",Thread.currentThread().isInterrupted());
+            });
+            t1.start();
+    
+            TimeUnit.SECONDS.sleep(1);
+            t1.interrupt();
+        }
+    }
+    ```
+
+-   重置标记即可重新part打断，即使用Thread.interrupted
+
 ### 1.14 两阶段终止 模式
 
 -   在线程1中终止线程2
@@ -376,3 +402,76 @@ public class TestInterrupt {
             }
         }
         ```
+
+-   isInterrupted interrupted均为判断是否打断
+    -   isInterrupted 判断后不会清楚打断标记
+    -   interrupted 判断后会清除打断标记
+
+### 1.15 不推荐的方法
+
+-   stop() 停止线程运行
+-   suspend() 挂起（暂停）线程运行
+-   resume() 恢复线程运行
+
+### 1.16 守护线程
+
+-   默认情况下，Java所有进程需要等待所有线程都运行结束，才会结束。有一种特殊线程叫做守护线程，只要其他非守护线程运行结束了，即时守护线程的代码没有执行完，也会强制结束。
+
+-   ```java
+    import lombok.extern.slf4j.Slf4j;
+    
+    @Slf4j(topic = "c.daemon")
+    public class Daemon {
+        public static void main(String[] args) throws InterruptedException {
+            Thread t1 = new Thread(()->{
+                while (true){
+                    if (Thread.currentThread().isInterrupted()){
+                        break;
+                    }
+                }
+                log.debug("结束");
+            },"t1");
+            t1.setDaemon(true);
+            t1.start();
+    
+            Thread.sleep(1000);
+            log.debug("结束");
+        }
+    }
+    ```
+
+-   setDaemon() 方法
+
+-   Tomcat中Acceptor和Poller线程都是守护线程，所以Tomcat接收到shutdown后，不会等待它们的任务处理完
+
+### 1.17 五种状态
+
+-   从操作系统层面描述
+
+![1011637916088_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1011637916088_.pic_hd.jpg)
+
+-   初始状态：仅在语言层面创建了线程对象，还未与操作系统线程关联
+-   可运行状态：就绪状态，指该线程已经被创建，与操作系统线程关联，可以由CPU调度执行
+-   运行状态：指获取了CPU时间片运行汇中的状态
+    -   当CPU时间片完时，会从运行状态转换至可运行状态，会产生线程的上下文切换
+-   阻塞状态
+    -   如果调用了阻塞API，如BIO读写文件，这时线程实际不会用到CPU，会导致上下文切换，进入阻塞状态
+    -   当BIO操作完毕，会由操作系统唤醒阻塞的线程，转换至可运行状态
+    -   与可运行状态的区别是，对阻塞状态的线程来说只要它们一直不换行，调度器就一直不回考虑它们
+-   终止状态
+    -   表示线程已经执行完毕，声明周期结束，不会再转换为其他状态
+
+### 1.18 六种状态
+
+-   根据Java API层面描述
+-   根据Thread.State，分为6种状态
+
+![1021637916844_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1021637916844_.pic_hd.jpg)
+
+-   NEW：初始状态
+-   RUNNABLE：三合一
+-   TERMINATED：终止状态
+-   阻塞状态细分
+    -   BLOCKED：
+    -   WAITING：
+    -   TIMED_WAITING：

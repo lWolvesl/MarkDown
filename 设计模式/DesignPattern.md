@@ -70,7 +70,7 @@
 
 - 选择性实例化对象
 
-![IMG_1199](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/IMG_1199.jpg)
+-   定义一个创建对象的接口，让其子类自己决定实例化哪一个工厂类，工厂模式使其创建过程延迟到子类进行
 
 ## 二、 策略模式
 
