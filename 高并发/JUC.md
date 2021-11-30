@@ -472,6 +472,637 @@ public class TestInterrupt {
 -   RUNNABLE：三合一
 -   TERMINATED：终止状态
 -   阻塞状态细分
-    -   BLOCKED：
-    -   WAITING：
-    -   TIMED_WAITING：
+    -   BLOCKED：未获得锁
+    -   WAITING：无限等待
+    -   TIMED_WAITING：有时限等待
+
+
+
+### 1.19 例子，多线程泡茶
+
+![截屏2021-11-26 19.49.28](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/%E6%88%AA%E5%B1%8F2021-11-26%2019.49.28.png)
+
+```java
+package com.li.n5;
+
+import com.li.sleep.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * @author li
+ */
+
+@Slf4j(topic = "c.boil")
+public class BoilWater {
+    public static void main(String[] args) {
+        Thread t1 = new Thread(()->{
+            log.debug("老王洗水壶");
+            Sleep.sleep(1);
+            log.debug("老王洗完了水壶");
+            Sleep.sleep(1);
+            log.debug("老王烧水");
+            Sleep.sleep(5);
+            log.debug("老王烧开了水");
+        },"老王");
+
+        Thread t2 = new Thread(()->{
+            log.debug("小李洗茶壶");
+            Sleep.sleep(1);
+            log.debug("小李洗完了茶壶");
+            log.debug("小李洗茶杯");
+            Sleep.sleep(2);
+            log.debug("小李洗完了茶杯");
+            log.debug("小李拿茶叶");
+            Sleep.sleep(1);
+            log.debug("小李拿到了茶叶");
+            try {
+                t1.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            log.debug("小李泡茶");
+        },"小李");
+
+
+        t1.start();
+        t2.start();
+    }
+}
+```
+
+-   运行结果
+
+    >20:01:11:111[小李]c.boil - 小李洗茶壶
+    >20:01:11:111[老王]c.boil - 老王洗水壶
+    >20:01:12:112[小李]c.boil - 小李洗完了茶壶
+    >20:01:12:112[老王]c.boil - 老王洗完了水壶
+    >20:01:12:112[小李]c.boil - 小李洗茶杯
+    >20:01:13:113[老王]c.boil - 老王烧水
+    >20:01:14:114[小李]c.boil - 小李洗完了茶杯
+    >20:01:14:114[小李]c.boil - 小李拿茶叶
+    >20:01:15:115[小李]c.boil - 小李拿到了茶叶
+    >20:01:18:118[老王]c.boil - 老王烧开了水
+    >20:01:18:118[小李]c.boil - 小李泡茶
+
+## 二、共享模型之管程
+
+### 2.1 共享带来的问题
+
+-   模拟
+
+-   ```java
+    package com.li.safe;
+    
+    import lombok.extern.slf4j.Slf4j;
+    import org.junit.Test;
+    
+    @Slf4j(topic = "c.unsafe")
+    public class SafeUn {
+        int count = 0;
+        @Test
+        public void test01() throws InterruptedException {
+            Thread t1 = new Thread(()->{
+                for (int i = 0;i<5000;i++){
+                    count++;
+                }
+            },"t1");
+            Thread t2 = new Thread(()->{
+                for (int i = 0;i<5000;i++){
+                    count--;
+                }
+            },"t2");
+            t1.start();
+            t2.start();
+            t1.join();
+            t2.join();
+            log.debug("{}",count);
+        }
+    }
+    ```
+
+-   结果可能不为1,由于分时系统导致的上下文切换引起指令交错导致写入数据不一致
+
+-   临界区
+    -   多个线程访问共享资源（写操作）
+    -   一段代码块如果存在对共享资源的多线程读写操作，称此代码块为**临界区**
+-   竞态条件
+    -   多个线程在临界区内执行，由于代码块执行顺序不同而导致结果无法预测，称之为发生了**竞态条件**
+
+### 2.2 synchronized解决方案
+
+-   阻塞式：synchronized，lock
+-   非阻塞式：原子变量
+
+
+
+-   synchronized 对象锁
+
+```java
+package com.li.safe;
+
+import lombok.extern.slf4j.Slf4j;
+import org.junit.Test;
+
+@Slf4j(topic = "c.unsafe")
+public class SafeUn {
+    int count = 0;
+    @Test
+    public void test01() throws InterruptedException {
+        Thread t1 = new Thread(()->{
+            for (int i = 0;i<5000;i++){
+                synchronized (this){
+                    count++;
+                }
+            }
+        },"t1");
+        Thread t2 = new Thread(()->{
+            for (int i = 0;i<5000;i++){
+                synchronized (this) {
+                    count--;
+                }
+            }
+        },"t2");
+        t1.start();
+        t2.start();
+        t1.join();
+        t2.join();
+        log.debug("{}",count);
+    }
+}
+```
+
+-   此时输出结果均为0
+
+-   对象锁保证了临界区的原子性
+
+-   面向对象改进  面向过程->面向对象 即实现线程安全
+
+```java
+package com.li.safe;
+
+import lombok.extern.slf4j.Slf4j;
+import org.junit.Test;
+
+@Slf4j(topic = "c.unsafe")
+public class SafeUn {
+    Room room = new Room();
+
+    @Test
+    public void test01() throws InterruptedException {
+        Thread t1 = new Thread(() -> {
+            for (int i = 0; i < 5000; i++) {
+                room.increase();
+            }
+        }, "t1");
+        Thread t2 = new Thread(() -> {
+            for (int i = 0; i < 5000; i++) {
+                room.decrease();
+            }
+        }, "t2");
+        t1.start();
+        t2.start();
+        t1.join();
+        t2.join();
+        log.debug("{}", room);
+    }
+}
+
+class Room {
+    private int counter = 0;
+
+    public void increase() {
+        synchronized (this) {
+            counter++;
+        }
+    }
+
+    public void decrease() {
+        synchronized (this) {
+            counter--;
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "Room{" +
+                "counter=" + counter +
+                '}';
+    }
+}
+
+```
+
+### 2.3 方法上的synchronized
+
+```java
+		public synchronized void decrease() {
+        counter--;
+    }
+```
+
+-   等同于
+
+```java
+		public void decrease() {
+        synchronized (this) {
+            counter--;
+        }
+    }
+```
+
+-   实际上是锁着当前对象
+-   **线程八锁**
+    -   考察synchronized锁住的是哪个对象
+    -   锁住的是`this`即为 `Number` 类![1051638152516_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1051638152516_.pic_hd.jpg)
+    -   加锁与上一致，只是多了个`sleep()`![1061638152667_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1061638152667_.pic_hd.jpg)
+    -   方法三未加synchronized，因此方法三未加锁，一旦启动将并行执行![1071638152773_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1071638152773_.pic_hd.jpg)
+    -   情况四是两个对象分别加锁，因此运行方法时均不会互斥![1081638153051_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1081638153051_.pic_hd.jpg)
+    -   情况5与情况4相同，两者加锁对象不同，不互斥![1081638153051_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1081638153051_.pic_hd.jpg)
+    -   情况6与情况2相同，不同的是static![1091638153496_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1091638153496_.pic_hd.jpg)
+    -   情况7和情况6相同，锁住同一个对象![1101638153569_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1101638153569_.pic_hd.jpg)
+    -   情况8与情况7一样![1111638154026_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1111638154026_.pic_hd.jpg)
+
+-   static
+    -   加static的是全局锁，锁住的是当前类
+    -   不加static的是实例锁，锁住的是某个对象
+
+### 2.4 变量的线程安全分析
+
+#### 2.4.1 成员变量和静态变量是否线程安全
+
+-   如果它们没有共享，则线程安全
+-   如果它们被共享了
+    -   如果只有读操作，则线程安全
+    -   如果有写操作，则为临界区需要考虑线程安全
+
+#### 2.4.2 局部变量是否线程安全
+
+-   局部变量是线程安全的
+-   局部变量引入的对象未必安全
+    -   如果对象没有逃离方法的作用访问，则是线程安全的
+    -   如果改对象逃离方法的作用范围，需要考虑线程安全
+-   引入对象如子类继承
+    -   修饰符在一定程度上可以提供线程安全
+
+#### 2.4.3 售票
+
+```java
+package com.li.safe;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.Vector;
+
+@Slf4j(topic = "c.cell")
+public class ExerciseShell {
+    public static void main(String[] args) throws InterruptedException {
+        TickWindow tickWindow = new TickWindow(1000);
+        List<Integer> amountList = new Vector<>();
+        List<Thread> threadList = new ArrayList<>();
+        for (int i = 0; i < 2000; i++) {
+            Thread thread = new Thread(() -> {
+                int sell = tickWindow.sell(randomAmount());
+                try {
+                    Thread.sleep(randomAmount());
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                amountList.add(sell);
+            });
+            threadList.add(thread);
+            thread.start();
+        }
+        for (Thread thread : threadList) {
+            thread.join();
+        }
+        log.debug("余票:{}",tickWindow.getCount());
+        log.debug("卖出了：{}",amountList.stream().mapToInt(i->i).sum());
+    }
+
+    static Random random = new Random();
+    public static int randomAmount(){
+        return random.nextInt(5)+1;
+    }
+
+}
+
+class TickWindow {
+    private int count;
+
+    public TickWindow(int count) {
+        this.count = count;
+    }
+
+    public int getCount() {
+        return count;
+    }
+
+    public int sell(int amount) {
+        if (this.count >= amount) {
+            this.count -= amount;
+            return amount;
+        } else {
+            return 0;
+        }
+    }
+}
+```
+
+-   此时并未使用线程安全，会导致超卖
+
+-   解决方案，在sell方法加入synchronized修饰符
+
+#### 2.4.4 转账
+
+```java
+package com.li.safe;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Random;
+
+@Slf4j(topic = "c.transfer")
+public class Transfer {
+    public static void main(String[] args) throws InterruptedException {
+        Account account1 = new Account(1000);
+        Account account2 = new Account(1000);
+        Thread t1 = new Thread(() -> {
+            for (int i = 0; i < 1000; i++) {
+                account1.transfer(account2, randomAmount());
+            }
+        }, "t1");
+        Thread t2 = new Thread(() -> {
+            for (int i = 0; i < 1000; i++) {
+                account2.transfer(account1, randomAmount());
+            }
+        }, "t2");
+        t1.start();
+        t2.start();
+        t1.join();
+        t2.join();
+        log.debug("{}", account1.getMoney() + account2.getMoney());
+    }
+
+    static Random random = new Random();
+
+    public static int randomAmount() {
+        return random.nextInt(1000) + 1;
+    }
+}
+
+class Account {
+    private int money;
+
+    public Account(int money) {
+        this.money = money;
+    }
+
+    public int getMoney() {
+        return money;
+    }
+
+    public void setMoney(int money) {
+        this.money = money;
+    }
+
+    public void transfer(Account target, int money) {
+        if (this.money >= money) {
+            this.setMoney(this.getMoney() - money);
+            target.setMoney(target.getMoney() + money);
+        }
+    }
+}
+```
+
+-   测试现象很明显
+-   解决方案
+    -   首先无法在transfer加关键字，会导致死锁
+    -   需要对两个共享变量都加锁，可以对Account类加锁
+
+```java
+public void transfer(Account target, int money) {
+    synchronized (Account.class) {
+        if (this.money >= money) {
+            this.setMoney(this.getMoney() - money);
+            target.setMoney(target.getMoney() + money);
+        }
+    }
+}
+```
+
+-   此时就不会出现线程安全问题，但是效率较低
+
+## 三、锁
+
+### 3.1 Monitor-锁
+
+Mark Wrod结构
+
+![1141638251789_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1141638251789_.pic_hd.jpg)
+
+-   Monitor 监视器/管程 操作系统提供
+-   每个Java对象都可以关联一个Monitor对象，如果使用synchronized给对象上锁（重量级）之后，该对象头的Mark Word中就被设置指向Monitor指针
+-   ![1131638240125_.pic](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1131638240125_.pic.jpg)
+-   Monitor中的EntryList存储需要锁的进程
+-   Owner为正在拥有此锁的进程
+
+### 3.2 synchronized原理
+
+-   锁的状态一共有四种：无锁状态，偏向锁，轻量级锁和重量级锁
+
+-   | **锁状态** | 25 bit                       | 4bit         | 1bit         | 2bit |      |
+    | ---------- | ---------------------------- | ------------ | ------------ | ---- | ---- |
+    | 23bit      | 2bit                         | 是否是偏向锁 | 锁标志位     |      |      |
+    | 轻量级锁   | 指向栈中锁记录的指针         | 00           |              |      |      |
+    | 重量级锁   | 指向互斥量（重量级锁）的指针 | 10           |              |      |      |
+    | GC标记     | 空                           | 11           |              |      |      |
+    | 偏向锁     | 线程ID                       | Epoch        | 对象分代年龄 | 1    | 01   |
+    | 无锁       | 对象的hashCode               | 对象分代年龄 | 0            | 01   |      |
+
+#### 3.2.1 偏向锁
+
+-   某个锁专属于某个线程
+-   不需要重复获取锁，释放锁，只需要在运行时查看这个锁是不是偏向自己的
+-   第一次使用CAS将线程ID设置到对象的Mark Word头，之后发现这个线程ID是自己的就表示没有竞争，不用重新cas直接归此线程所有
+-   ![1231638254097_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1231638254097_.pic_hd.jpg)
+
+##### 3.2.2 偏向状态
+
+-   偏向锁默认存在延迟，初始启动时不一定会显示
+-   可以加入VM参数：-XX:BiasedLockingStartupDelay=0  代表无延迟
+-   如果未开启偏向锁，则为001
+-   禁用偏向锁 `-XX:-UseBiasedLocking`
+-   一旦调用 hashCode()方法，会禁用偏向锁
+    -   hashcode默认为0，只有调用hashCode时才会生成
+    -   因为hashcode需要占用31位，而偏向锁的线程id就占用了54位，一共64位会导致空间不足，自动转换为无偏向锁的Mark Word
+-   其他线程使用对象的时候，会将偏向锁升级为轻量级锁
+-   重偏向
+    -   当撤销偏向20次后，jvm就会给对象加锁时重新设置偏向，并且为批量重偏向
+-   批量撤销
+    -   当撤销偏向锁超过40次后，jvm会人品偏向错误，根本不应该偏向，这时整个类所有对象都会变为不可偏向的，新建对象也是不可偏向的。
+
+#### 3.2.2 轻量级锁 
+
+![1221638253876_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1221638253876_.pic_hd.jpg)
+
+-   如果一个对象虽然有多线程访问，但是多线程访问的时间是错开的，那么可以用轻量级锁进行优化
+-   语法仍是synchronized
+
+-   加锁
+
+>   （1）在代码进入同步块的时候，如果同步对象锁状态为无锁状态（锁标志位为“01”状态，是否为偏向锁为“0”），虚拟机首先将在当前线程的栈帧中建立一个名为锁记录（Lock Record）的空间，用于存储锁对象目前的Mark Word的拷贝，官方称之为 Displaced Mark Word。这时候线程堆栈与对象头的状态如图2.1所示。（2）拷贝对象头中的Mark Word复制到锁记录中。
+>
+>   （3）拷贝成功后，虚拟机将使用CAS操作尝试将对象的Mark Word更新为指向Lock Record的指针，并将Lock record里的owner指针指向object mark word。如果更新成功，则执行步骤（3），否则执行步骤（4）
+>
+>   （4）如果这个更新动作成功了，那么这个线程就拥有了该对象的锁，并且对象Mark Word的锁标志位设置为“00”，即表示此对象处于轻量级锁定状态，这时候线程堆栈与对象头的状态如图2.2所示。
+>
+>   （5）如果这个更新操作失败了，虚拟机首先会检查对象的Mark Word是否指向当前线程的栈帧，如果是就说明当前线程已经拥有了这个对象的锁，那就可以直接进入同步块继续执行。否则说明多个线程竞争锁，轻量级锁就要膨胀为重量级锁，锁标志的状态值变为“10”，Mark Word中存储的就是指向重量级锁（互斥量）的指针，后面等待锁的线程也要进入阻塞状态。 而当前线程便尝试使用自旋来获取锁，自旋就是为了不让线程阻塞，而采用循环去获取锁的过程。
+
+![820406-20160424105442866-2111954866](https://images2015.cnblogs.com/blog/820406/201604/820406-20160424105442866-2111954866.png)
+
+![820406-20160424105540163-1019388398](https://images2015.cnblogs.com/blog/820406/201604/820406-20160424105540163-1019388398.png)
+
+-   删锁
+
+>（1）通过CAS操作尝试把线程中复制的Displaced Mark Word对象替换当前的Mark Word。
+>
+>（2）如果替换成功，整个同步过程就完成了。
+>
+>（3）如果替换失败，说明有其他线程尝试过获取该锁（此时锁已膨胀），那就要在释放锁的同时，唤醒被挂起的线程。
+
+
+
+-   创建锁记录（Lock Record）对象，每个线程的栈针都会包含一个锁记录的结构，内部可以储存锁定对象的Mark Word
+
+-   ![1161638252002_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1161638252002_.pic_hd.jpg)
+
+-   让锁记录中的Object reference指向锁对象，并尝试用cas替换Object的Mark Word，将Mark Word的值存入锁记录
+
+-   ![1151638252001_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1151638252001_.pic_hd.jpg)
+
+-   如果cas替换成功，对象头中存储了锁记录地址和状态00，表示由该线程给对象加锁
+
+-   ![1171638252175_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1171638252175_.pic_hd.jpg)
+
+    -   cas即为替换操作
+
+-   如果cas失败
+
+    -   如果是其他线程已经持有了该Object的轻量级锁，这表明有竞争，进入锁膨胀过程
+    -   如果是自己执行了synchronized锁重入，那么再添加一条Lock Record作为重入的计数
+    -   ![1181638252533_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1181638252533_.pic_hd.jpg)
+    -   重入会存入null
+    -   每次解锁都会删除一个Lock Record
+
+-   退出sync代码块（解锁时），如果有null值的锁记录，表示有重入，此时重置锁记录，表示重入记录减一
+
+-   ![1191638252668_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1191638252668_.pic_hd.jpg)
+
+-   当退出sync代码块的锁记录值不为null时，这时cas将MarkWord 的值恢复给对象头
+
+    -   成功即成功
+    -   失败说明轻量级锁已经转变为重量级锁，进入重量级锁解锁流程
+
+    
+
+#### 3.2.3 锁膨胀
+
+-   将轻量级锁升级为重量级锁
+-   ![1201638253001_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1201638253001_.pic_hd.jpg)
+-   线程加锁失败
+    -   为对象申请Monitor锁，让Object指向重量级锁地址
+    -   然后自己进入Monitor的EntryList Blocked队列中
+    -   ![1211638253113_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1211638253113_.pic_hd.jpg)
+    -   Thread-0解锁时，Owner置为null，唤醒Blocked的线程
+
+#### 3.2.4 自旋优化
+
+-   重量锁竞争时，可以通过自旋进行优化，即循环获得锁，可以避免阻塞
+-   自旋为多核优化，多核处理器才会有实际体现
+
+#### 3.2.5 锁消除
+
+-   JIT会进一步优化
+-   若加锁对象是一个不可能被共享的，则此时加的锁会自动消除
+
+#### 3.2.6 锁粗化
+
+-   比如一个for中调用了多个synchronized，可以被粗化为一个synchronized中有个for循环
+
+### 3.3 wait/notify
+
+![1241638259294_.pic](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1241638259294_.pic.jpg)
+
+![1251638259321_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1251638259321_.pic_hd.jpg)
+
+#### 3.3.1 原理
+
+![1261638259358_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1261638259358_.pic_hd.jpg)
+
+-   Owner线程发现条件不满足，调用wait方法，进入WatiSet变为WAITING状态
+-   Blocked和waiting的线程都处于阻塞状态，不占用时间片
+-   blocked线程会在Owner线程释放锁时唤醒
+-   Waiting线程会在Owner线程调用notify或notifyAll时唤醒，唤醒时不代表直接获得锁，而是进入EntryList重新竞争
+
+##### 3.3.2 API
+
+-   必须获得锁的对象才能调用以下方法
+
+    -   `obj.wait()`
+
+    -   `obj.notify()`
+
+    -   `obj.notifyAll()`
+
+-   eg
+
+-   
+
+-   ```java
+    package com.li.waitset;
+    
+    import lombok.extern.slf4j.Slf4j;
+    import org.junit.Test;
+    
+    import java.util.concurrent.TimeUnit;
+    
+    @Slf4j(topic = "c.wait")
+    public class waitSet {
+        Object obj = new Object();
+        @Test
+        public void test01(){
+            new Thread(()->{
+                synchronized (obj){
+                    try {
+                        log.debug("开始wait");
+                        obj.wait();
+                        log.debug("被唤醒");
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            },"t1").start();
+            new Thread(()->{
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                synchronized (obj){
+                    log.debug("唤醒线程");
+                    obj.notify();
+                }
+            },"t2").start();
+    
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            log.debug("流程结束");
+        }
+    }
+    ```
