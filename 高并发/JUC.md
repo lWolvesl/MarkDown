@@ -1047,7 +1047,7 @@ Mark Wrod结构
 -   blocked线程会在Owner线程释放锁时唤醒
 -   Waiting线程会在Owner线程调用notify或notifyAll时唤醒，唤醒时不代表直接获得锁，而是进入EntryList重新竞争
 
-##### 3.3.2 API
+#### 3.3.2 API
 
 -   必须获得锁的对象才能调用以下方法
 
@@ -1106,3 +1106,408 @@ Mark Wrod结构
         }
     }
     ```
+
+![截屏2021-11-30 16.22.49](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/%E6%88%AA%E5%B1%8F2021-11-30%2016.22.49.png)
+
+-   sleep()和wait()
+
+| sleep()                               | wait()               |
+| ------------------------------------- | -------------------- |
+| sleep为Thread对象的私有方法           | wait所有对象均可调用 |
+| sleep在获得锁的线程中使用时无法释放锁 | wait调用后会释放锁   |
+
+	- 二者状态相同，都是Time_Waiting
+
+3.3.3 例子：干活等烟
+
+```java
+package com.li.waitset;
+
+import lombok.extern.slf4j.Slf4j;
+import org.junit.Test;
+
+@Slf4j(topic = "c.yangui")
+public class yangui {
+    final Object room = new Object();
+    boolean hasCigarette = false;
+
+    @Test
+    public void cigarette() throws InterruptedException {
+        new Thread(() -> {
+            synchronized (room) {
+                if (!hasCigarette) {
+                    log.debug("没有烟，先歇着");
+                    try {
+                        room.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                log.debug("{}开始干活", Thread.currentThread().getName());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                log.debug("{}干完活了", Thread.currentThread().getName());
+            }
+        }, "小王").start();
+
+        new Thread(() -> {
+            synchronized (room) {
+                log.debug("{}开始干活", Thread.currentThread().getName());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                log.debug("{}干完活了", Thread.currentThread().getName());
+            }
+        }, "小李").start();
+
+        new Thread(() -> {
+            synchronized (room) {
+                log.debug("{}开始干活", Thread.currentThread().getName());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                hasCigarette = true;
+                log.debug("{}给烟", Thread.currentThread().getName());
+                room.notifyAll();
+                log.debug("{}干完活了", Thread.currentThread().getName());
+            }
+        }, "小名").start();
+
+        new Thread(() -> {
+            synchronized (room) {
+                log.debug("{}开始干活", Thread.currentThread().getName());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                log.debug("{}干完活了", Thread.currentThread().getName());
+            }
+        }, "小红").start();
+
+        Thread.sleep(10000);
+    }
+}
+```
+
+![截屏2021-11-30 16.59.19](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/%E6%88%AA%E5%B1%8F2021-11-30%2016.59.19.png)
+
+-   此办法解决了线程阻塞，但如果有其他线程也在wait呢，是否会唤醒错误
+
+```java
+package com.li.safe;
+
+import lombok.extern.slf4j.Slf4j;
+import org.junit.Test;
+
+/**
+ * @author li
+ */
+@Slf4j(topic = "c.carry")
+public class TakeOut {
+    final Object room = new Object();
+    boolean hasCigarette = false;
+    boolean hasTakeOut = false;
+
+    @Test
+    public void test() throws InterruptedException {
+        Thread thread = new Thread(() -> {
+            synchronized (room) {
+                while (!hasCigarette) {
+                    log.debug("没有烟，先等着");
+                    try {
+                        room.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if (hasCigarette) {
+                    log.debug("{}干活", Thread.currentThread().getName());
+                } else {
+                    log.debug("{}没干活", Thread.currentThread().getName());
+                }
+            }
+        }, "小南");
+
+        Thread thread1 = new Thread(() -> {
+            synchronized (room) {
+                while (!hasTakeOut) {
+                    log.debug("没有外卖，先等着");
+                    try {
+                        room.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if (hasTakeOut) {
+                    log.debug("{}干活", Thread.currentThread().getName());
+                } else {
+                    log.debug("{}没干活", Thread.currentThread().getName());
+                }
+            }
+        }, "小女");
+
+        thread.start();
+        thread1.start();
+
+        Thread.sleep(1000);
+        new Thread(()->{
+            synchronized (room){
+                hasTakeOut = true;
+                log.debug("外卖员来送外卖了");
+                room.notifyAll();
+            }
+        },"外卖员").start();
+
+        thread1.join();
+        thread.join();
+    }
+}
+```
+
+-   使用notifyAll，将线程的判断变为while循环，唤醒判断并检查是否真正唤醒自己
+
+### 3.4 同步之保护性暂停（多线程设计模式）
+
+-   用于在一个线程等待另一个线程的执行结果
+-   ![1271638325449_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1271638325449_.pic_hd.jpg)
+-   有一个结果需要从一个线程传递到另一个线程，让他们同时关联同一个object
+-   如果有结果不断从一个线程到另一个线程，那么可以使用消息队列
+-   JDK中，join、Future的实现，采用的就是这种模式
+
+```java
+package com.li.n6;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+public class GuardedObject {
+    private Object response;
+
+    public Object get(long timeout) {
+        synchronized (this) {
+            long begin = System.currentTimeMillis();
+            long passed = 0L;
+            while (response == null) {
+                try {
+                    this.wait(timeout - passed);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                passed = System.currentTimeMillis() - begin;
+                if (passed >= timeout){
+                    break;
+                }
+            }
+            return response;
+        }
+    }
+
+    public void complete(Object response){
+        synchronized (this){
+            this.response = response;
+            this.notifyAll();
+        }
+    }
+}
+
+@Slf4j(topic = "c.01")
+class test01 {
+    public static void main(String[] args) {
+        GuardedObject object = new GuardedObject();
+        new Thread(()->{
+            log.debug("等待结果");
+            Object o = object.get(2000);
+            if (o == null){
+                log.debug("结果是：{}",o);
+            }else {
+                List<String> list = (List<String>) o;
+                log.debug("结果的大小是:{}", list.size());
+            }
+        },"t1").start();
+
+        new Thread(()->{
+            log.debug("执行下载");
+            try {
+                TimeUnit.SECONDS.sleep(3);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            List<String> list = DownLoader.downloadBaidu();
+            object.complete(list);
+        },"t2").start();
+    }
+}
+
+class DownLoader {
+
+    public static List<String> downloadBaidu() {
+        HttpURLConnection connection = null;
+        String url = "https://www.baidu.com/";
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        List<String> lines = new ArrayList<>();
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(line);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return lines;
+    }
+}
+```
+
+#### 3.4.1 join原理
+
+-   底层使用了保护性暂停模式
+-   区别为join为等待线程结束
+
+#### 3.4.2 扩展-解耦
+
+-   示例：送信
+
+![1281638337747_.pic_hd](https://typroa-wolves.oss-cn-hangzhou.aliyuncs.com/img-li/1281638337747_.pic_hd.jpg)
+
+```java
+package com.li.n6;
+
+import lombok.extern.slf4j.Slf4j;
+import org.junit.Test;
+
+import java.util.Hashtable;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+public class GuardedObject1 {
+    private int id;
+    private Object response;
+
+    public GuardedObject1(int id) {
+        this.id = id;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public Object get(long timeout) {
+        synchronized (this) {
+            long begin = System.currentTimeMillis();
+            long passed = 0L;
+            while (response == null) {
+                try {
+                    this.wait(timeout - passed);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                passed = System.currentTimeMillis() - begin;
+                if (passed >= timeout) {
+                    break;
+                }
+            }
+            return response;
+        }
+    }
+
+    public void complete(Object response) {
+        synchronized (this) {
+            this.response = response;
+            this.notifyAll();
+        }
+    }
+
+}
+
+class MailBoxes {
+    private static Map<Integer, GuardedObject1> boxes = new Hashtable<Integer, GuardedObject1>();
+
+    private static int id = 1;
+
+    private static synchronized int generateId() {
+        return id++;
+    }
+
+    public static GuardedObject1 getGuardedObject(int id){
+        return boxes.remove(id);
+    }
+
+    public static GuardedObject1 createGuard(){
+        GuardedObject1 guardedObject = new GuardedObject1(generateId());
+        boxes.put(guardedObject.getId(),guardedObject);
+        return guardedObject;
+    }
+
+    public static Set<Integer> getAllId(){
+        return boxes.keySet();
+    }
+}
+
+@Slf4j(topic = "c.people")
+class People implements Runnable {
+    @Override
+    public void run() {
+        GuardedObject1 guard = MailBoxes.createGuard();
+        log.debug("开售收信：{}",guard.getId());
+        log.debug("收到信 id：{} 内容：{}",guard.getId(),guard.get(5000));
+    }
+}
+
+@Slf4j(topic = "c.Postman")
+class Postman implements Runnable{
+    private int id;
+    private String mail;
+
+    public Postman(int id, String mail) {
+        this.id = id;
+        this.mail = mail;
+    }
+
+    @Override
+    public void run() {
+        GuardedObject1 guardedObject = MailBoxes.getGuardedObject(id);
+        log.debug("邮递员送信给 id：{} 内容为：{}",id,mail);
+        guardedObject.complete(mail);
+
+    }
+}
+
+class testGuard{
+    public static void main(String[] args) {
+        for (int i = 1;i<=3;i++){
+            new Thread(new People(),"居民"+i).start();
+        }
+        try {
+            TimeUnit.SECONDS.sleep(1);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        for (Integer id : MailBoxes.getAllId()){
+            new Thread(new Postman(id,id+"的内容"),"快递员"+id).start();
+        }
+    }
+}
+```
